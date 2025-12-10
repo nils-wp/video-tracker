@@ -380,6 +380,9 @@
             // Standard Bunny.net Origins
             this.addOrigin('https://iframe.mediadelivery.net');
             this.addOrigin('https://video.bunnycdn.com');
+            // Framer & Common Origins
+            this.addOrigin('https://wachstumspartner.io');
+            this.addOrigin('https://framer.app');
         }
 
         /**
@@ -605,25 +608,53 @@
 
         /**
          * E-Mail aus URL-Parametern extrahieren mit Validierung
+         * Versucht auch parent window für iframe-Einbettungen
          */
         extractEmailFromUrl() {
-            const urlParams = new URLSearchParams(window.location.search);
             const emailParams = ['email', 'e', 'subscriber_email', 'contact_email'];
 
-            for (const param of emailParams) {
-                const value = urlParams.get(param);
-                if (value) {
-                    // Sanitize
-                    const sanitized = this.config.security.sanitizeInputs
-                        ? Validators.sanitizeString(value)
-                        : value;
+            // Versuche verschiedene URL-Quellen (für iframe-Einbettungen)
+            const urlSources = [
+                window.location.search,
+            ];
 
-                    // Validieren
-                    if (!this.config.security.validateEmail || Validators.isValidEmail(sanitized)) {
-                        this.email = sanitized;
-                        break;
-                    } else {
-                        console.warn(`VideoTracker: Ungültige E-Mail in URL-Parameter "${param}" gefunden.`);
+            // Versuche parent window (für iframes)
+            try {
+                if (window.parent && window.parent !== window) {
+                    urlSources.push(window.parent.location.search);
+                }
+            } catch (e) {
+                // Cross-origin - versuche aus referrer
+                if (document.referrer) {
+                    try {
+                        const referrerUrl = new URL(document.referrer);
+                        urlSources.push(referrerUrl.search);
+                    } catch (e2) {
+                        // Ignore
+                    }
+                }
+            }
+
+            // Durchsuche alle URL-Quellen
+            for (const search of urlSources) {
+                if (!search) continue;
+                const urlParams = new URLSearchParams(search);
+
+                for (const param of emailParams) {
+                    const value = urlParams.get(param);
+                    if (value) {
+                        // Sanitize
+                        const sanitized = this.config.security.sanitizeInputs
+                            ? Validators.sanitizeString(value)
+                            : value;
+
+                        // Validieren
+                        if (!this.config.security.validateEmail || Validators.isValidEmail(sanitized)) {
+                            this.email = sanitized;
+                            return;
+                        } else {
+                            console.warn(`VideoTracker: Ungültige E-Mail in URL-Parameter "${param}" gefunden.`);
+                        }
                     }
                 }
             }
