@@ -750,10 +750,14 @@
             const params = new URLSearchParams({
                 autoplay: this.config.autoplay ? 'true' : 'false',
                 preload: 'true',
-                responsive: 'true'
+                responsive: 'true',
+                // Enable Bunny Player API for postMessage events
+                enableApi: 'true',
+                api: '1'
             });
 
             iframe.src = `${bunnyUrl}?${params.toString()}`;
+            iframe.id = 'bunny-stream-embed';
             iframe.style.position = 'absolute';
             iframe.style.top = '0';
             iframe.style.left = '0';
@@ -802,13 +806,8 @@
 
                 if (!data || typeof data !== 'object') return;
 
-                // Log parsed messages for debugging
-                console.log('VideoTracker Bunny Event:', {
-                    event: data.event || data.type,
-                    currentTime: data.currentTime,
-                    duration: data.duration,
-                    raw: data
-                });
+                // Log ALL parsed messages for debugging
+                console.log('VideoTracker Bunny Event:', JSON.stringify(data, null, 2));
 
                 // Handle Bunny player.js events
                 const eventType = data.event || data.type;
