@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Analytics Player v2.0 - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #8b8b8b;
+            margin-bottom: 40px;
+        }
+
+        .version-badge {
+            background: #4ade80;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        #video-container {
+            margin-bottom: 30px;
+        }
+
+        .debug-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .debug-panel h3 {
+            color: #4ade80;
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+
+        .debug-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .debug-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .debug-item label {
+            display: block;
+            font-size: 0.75rem;
+            color: #8b8b8b;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .debug-item span {
+            font-family: 'Monaco', 'Consolas', monospace;
+            color: #4ade80;
+            word-break: break-all;
+        }
+
+        .debug-item span.error {
+            color: #f87171;
+        }
+
+        .debug-item span.warning {
+            color: #fbbf24;
+        }
+
+        .milestone-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .milestone-tag {
+            background: #4ade80;
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .feature-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .feature-badge {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #93c5fd;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+        }
+
+        .feature-badge.active {
+            background: rgba(74, 222, 128, 0.2);
+            border-color: rgba(74, 222, 128, 0.4);
+            color: #4ade80;
+        }
+
+        .webhook-log {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .webhook-log h4 {
+            color: #f59e0b;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        .log-entry {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.75rem;
+            color: #a0a0a0;
+            padding: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry .time {
+            color: #6b7280;
+        }
+
+        .log-entry .event {
+            color: #4ade80;
+        }
+
+        .log-entry.retry {
+            color: #fbbf24;
+        }
+
+        .log-entry.error {
+            color: #f87171;
+        }
+
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .info-box p {
+            font-size: 0.9rem;
+            color: #93c5fd;
+            line-height: 1.6;
+        }
+
+        .info-box code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-box .number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4ade80;
+        }
+
+        .stat-box .label {
+            font-size: 0.7rem;
+            color: #8b8b8b;
+            text-transform: uppercase;
+        }
+
+        .stat-box.error .number {
+            color: #f87171;
+        }
+
+        .stat-box.warning .number {
+            color: #fbbf24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Analytics Player <span class="version-badge">v2.0</span></h1>
+        <p class="subtitle">Production-Ready mit HMAC, Retry & Error Monitoring</p>
+
+        <!-- Video wird hier eingefuegt -->
+        <div id="video-container"></div>
+
+        <!-- Debug Panel -->
+        <div class="debug-panel">
+            <h3>Tracking Status</h3>
+
+            <!-- Feature Badges -->
+            <div class="feature-badges">
+                <span class="feature-badge" id="badge-hmac">HMAC Signing</span>
+                <span class="feature-badge" id="badge-retry">Retry Queue</span>
+                <span class="feature-badge" id="badge-validation">Input Validation</span>
+                <span class="feature-badge" id="badge-monitoring">Error Monitoring</span>
+                <span class="feature-badge" id="badge-origin">Origin Verification</span>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="number" id="stat-sent">0</div>
+                    <div class="label">Webhooks Sent</div>
+                </div>
+                <div class="stat-box error">
+                    <div class="number" id="stat-failed">0</div>
+                    <div class="label">Failed</div>
+                </div>
+                <div class="stat-box warning">
+                    <div class="number" id="stat-queue">0</div>
+                    <div class="label">In Queue</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="stat-errors">0</div>
+                    <div class="label">Errors</div>
+                </div>
+            </div>
+
+            <div class="debug-info" style="margin-top: 15px;">
+                <div class="debug-item">
+                    <label>E-Mail</label>
+                    <span id="debug-email">-</span>
+                </div>
+                <div class="debug-item">
+                    <label>Video ID</label>
+                    <span id="debug-videoid">-</span>
+                </div>
+                <div class="debug-item">
+                    <label>Aktuelle Zeit</label>
+                    <span id="debug-time">0:00 / 0:00</span>
+                </div>
+                <div class="debug-item">
+                    <label>Fortschritt</label>
+                    <span id="debug-progress">0%</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <label style="font-size: 0.75rem; color: #8b8b8b; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Erreichte Meilensteine
+                </label>
+                <div class="milestone-list" id="milestone-list">
+                    <span style="color: #6b7280; font-size: 0.85rem;">Noch keine</span>
+                </div>
+            </div>
+
+            <div class="webhook-log">
+                <h4>Event Log</h4>
+                <div id="webhook-log-entries">
+                    <div class="log-entry" style="color: #6b7280;">Warte auf Events...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <p>
+                <strong>Teste das E-Mail-Tracking:</strong> Fuege <code>?email=test@beispiel.de</code> an die URL an.<br>
+                Beispiel: <code>example.html?email=max@mustermann.de</code>
+            </p>
+        </div>
+    </div>
+
+    <!-- Video Tracker Script -->
+    <script src="video-tracker.js"></script>
+
+    <script>
+        // =====================================================
+        // KONFIGURATION v2.0 - Production Ready
+        // =====================================================
+
+        const tracker = new VideoTracker('video-container', {
+            // === VIDEO EINSTELLUNGEN ===
+            videoType: 'bunny',
+            bunnyLibraryId: '411907',
+            bunnyVideoId: '63b8fdda-30c1-4266-99b9-705a597541b2',
+
+            // === PLAYER EINSTELLUNGEN ===
+            autoplay: false,
+            muted: false,
+            controls: true,
+            poster: '',
+
+            // === WEBHOOK EINSTELLUNGEN ===
+            webhookUrl: 'https://dein-n8n-server.de/webhook/video-tracking',
+
+            // NEU: HMAC Secret fuer Webhook-Signierung
+            // Der Server kann damit die Authentizitaet pruefen
+            webhookSecret: 'dein-geheimer-schluessel-hier',
+
+            // NEU: Nur HTTPS Webhooks erlauben (Production)
+            requireHttps: false, // Auf true setzen fuer Production!
+
+            // === MEILENSTEINE ===
+            milestones: {
+                type: 'percent',
+                values: [25, 50, 75, 100]
+            },
+
+            // === NEU: RETRY EINSTELLUNGEN ===
+            retry: {
+                enabled: true,          // Retry aktivieren
+                maxRetries: 3,          // Maximale Versuche
+                baseDelay: 1000,        // Start-Delay (1 Sekunde)
+                maxDelay: 30000         // Max Delay (30 Sekunden)
+            },
+
+            // === NEU: ERROR MONITORING ===
+            errorMonitoring: {
+                enabled: true,
+                maxErrors: 100,         // Max gespeicherte Fehler
+                // Optional: Fehler an externen Service senden
+                // errorEndpoint: 'https://dein-error-tracking.de/api/errors',
+                onError: function(error) {
+                    console.error('VideoTracker Error:', error);
+                    addLogEntry({
+                        event: 'error',
+                        message: error.message
+                    }, 'error');
+                }
+            },
+
+            // === NEU: SICHERHEIT ===
+            security: {
+                validateEmail: true,     // E-Mail Format pruefen
+                sanitizeInputs: true,    // XSS Prevention
+                allowedOrigins: [        // Zusaetzliche erlaubte Origins
+                    // 'https://deine-domain.de'
+                ]
+            },
+
+            // === STYLING ===
+            styles: {
+                width: '100%',
+                maxWidth: '800px',
+                borderRadius: '12px',
+                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)'
+            }
+        });
+
+        // =====================================================
+        // DEBUG FUNKTIONEN
+        // =====================================================
+
+        // Feature-Badges aktualisieren
+        function updateFeatureBadges() {
+            const config = tracker.config;
+
+            setBadgeActive('badge-hmac', !!config.webhookSecret);
+            setBadgeActive('badge-retry', config.retry?.enabled);
+            setBadgeActive('badge-validation', config.security?.validateEmail);
+            setBadgeActive('badge-monitoring', config.errorMonitoring?.enabled);
+            setBadgeActive('badge-origin', true); // Immer aktiv
+        }
+
+        function setBadgeActive(id, active) {
+            const badge = document.getElementById(id);
+            if (badge) {
+                badge.classList.toggle('active', active);
+            }
+        }
+
+        // Original sendWebhook erweitern fuer Logging
+        const originalSendWebhook = tracker.sendWebhook.bind(tracker);
+        tracker.sendWebhook = async function(data) {
+            addLogEntry(data, 'event');
+            updateMilestoneDisplay();
+            return originalSendWebhook(data);
+        };
+
+        // Retry-Handler fuer Logging
+        const originalHandleRetry = tracker.handleRetry.bind(tracker);
+        tracker.handleRetry = function(info) {
+            addLogEntry({
+                event: 'retry',
+                attempt: info.attempt,
+                maxRetries: info.maxRetries,
+                delay: info.delay
+            }, 'retry');
+            return originalHandleRetry(info);
+        };
+
+        // Debug-Anzeige aktualisieren
+        function updateDebugDisplay() {
+            const status = tracker.getStatus();
+
+            // Basis-Infos
+            document.getElementById('debug-email').textContent = status.email || 'Nicht in URL';
+            document.getElementById('debug-videoid').textContent = status.videoId;
+
+            // Video-Zeit
+            if (tracker.video) {
+                const current = tracker.video.currentTime;
+                const duration = tracker.video.duration || 0;
+                const percent = duration > 0 ? Math.round((current / duration) * 100) : 0;
+
+                document.getElementById('debug-time').textContent =
+                    `${formatTime(current)} / ${formatTime(duration)}`;
+                document.getElementById('debug-progress').textContent = `${percent}%`;
+            }
+
+            // Stats
+            document.getElementById('stat-sent').textContent = status.webhooksSent || 0;
+            document.getElementById('stat-failed').textContent = status.webhooksFailed || 0;
+            document.getElementById('stat-queue').textContent = status.retryQueue?.queueLength || 0;
+            document.getElementById('stat-errors').textContent = status.errors?.length || 0;
+        }
+
+        function updateMilestoneDisplay() {
+            const status = tracker.getStatus();
+            const container = document.getElementById('milestone-list');
+
+            if (status.triggeredMilestones.length === 0) {
+                container.innerHTML = '<span style="color: #6b7280; font-size: 0.85rem;">Noch keine</span>';
+            } else {
+                container.innerHTML = status.triggeredMilestones
+                    .map(m => {
+                        const value = m.replace('percent_', '').replace('time_', '');
+                        const suffix = m.includes('percent') ? '%' : 's';
+                        return `<span class="milestone-tag">${value}${suffix}</span>`;
+                    })
+                    .join('');
+            }
+        }
+
+        function addLogEntry(data, type = 'event') {
+            const container = document.getElementById('webhook-log-entries');
+            const time = new Date().toLocaleTimeString('de-DE');
+
+            // Ersten "Warte..." Eintrag entfernen
+            if (container.children.length === 1 && container.children[0].textContent.includes('Warte')) {
+                container.innerHTML = '';
+            }
+
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+
+            let content = '';
+            if (type === 'retry') {
+                content = `Retry ${data.attempt}/${data.maxRetries} in ${data.delay}ms`;
+            } else if (type === 'error') {
+                content = `ERROR: ${data.message}`;
+            } else {
+                content = `${data.event}${data.milestoneLabel ? ': ' + data.milestoneLabel : ''} ${data.email ? '(' + data.email + ')' : ''}`;
+            }
+
+            entry.innerHTML = `<span class="time">[${time}]</span> <span class="event">${content}</span>`;
+            container.insertBefore(entry, container.firstChild);
+
+            // Max 50 Eintraege
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Updates
+        setInterval(updateDebugDisplay, 500);
+        updateDebugDisplay();
+        updateFeatureBadges();
+
+        // Konsolen-Zugriff
+        window.videoTracker = tracker;
+        console.log('%cVideo Tracker v2.0 geladen', 'color: #4ade80; font-weight: bold;');
+        console.log('Verfuegbar als: window.videoTracker');
+        console.log('Methoden: .getStatus(), .resetMilestones(), .getErrorMonitor(), .getRetryQueue()');
+    </script>
+</body>
+</html>

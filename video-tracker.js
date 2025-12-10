@@ -772,21 +772,65 @@
          * Bunny.net Tracking via postMessage mit Origin-Verifikation
          */
         setupBunnyTracking() {
+            // Send test webhook on init to verify connection
+            this.sendWebhook({
+                event: 'tracker_initialized',
+                message: 'VideoTracker successfully loaded'
+            });
+
             window.addEventListener('message', (event) => {
-                // Origin verifizieren!
-                if (!this.originVerifier.verifyEvent(event)) {
+                // Log ALL messages for debugging
+                console.log('VideoTracker postMessage received:', {
+                    origin: event.origin,
+                    data: event.data,
+                    type: event.data?.type || event.data?.event || 'unknown'
+                });
+
+                // Origin verifizieren - aber erlaube auch andere Bunny Origins
+                const isBunnyOrigin = event.origin.includes('bunny') ||
+                                      event.origin.includes('mediadelivery') ||
+                                      event.origin.includes('b-cdn');
+
+                if (!this.originVerifier.verifyEvent(event) && !isBunnyOrigin) {
                     console.warn('VideoTracker: postMessage von unbekannter Origin ignoriert:', event.origin);
                     return;
                 }
 
-                if (event.data && event.data.type) {
-                    switch (event.data.type) {
-                        case 'bunny-stream-time-update':
-                            this.handleTimeUpdate(event.data.currentTime, event.data.duration);
-                            break;
-                        case 'bunny-stream-ended':
-                            this.checkMilestone(100, event.data.duration);
-                            break;
+                // Handle Bunny Stream messages (multiple formats)
+                if (event.data) {
+                    const data = event.data;
+
+                    // Format 1: {type: 'bunny-stream-time-update', currentTime: X, duration: Y}
+                    if (data.type === 'bunny-stream-time-update') {
+                        this.handleTimeUpdate(data.currentTime, data.duration);
+                    }
+                    // Format 2: {event: 'timeupdate', currentTime: X, duration: Y}
+                    else if (data.event === 'timeupdate' && data.currentTime !== undefined) {
+                        this.handleTimeUpdate(data.currentTime, data.duration);
+                    }
+                    // Format 3: {currentTime: X, duration: Y} (no type)
+                    else if (data.currentTime !== undefined && data.duration !== undefined && !data.type && !data.event) {
+                        this.handleTimeUpdate(data.currentTime, data.duration);
+                    }
+                    // Format 4: Bunny specific progress
+                    else if (data.type === 'progress' || data.event === 'progress') {
+                        if (data.percent !== undefined) {
+                            const duration = data.duration || 100;
+                            this.handleTimeUpdate((data.percent / 100) * duration, duration);
+                        }
+                    }
+                    // Video ended
+                    else if (data.type === 'bunny-stream-ended' || data.event === 'ended' || data.type === 'ended') {
+                        this.checkMilestone(100, data.duration || 100);
+                    }
+                    // Video started/play
+                    else if (data.type === 'play' || data.event === 'play' || data.type === 'bunny-stream-play') {
+                        console.log('VideoTracker: Bunny video started');
+                        this.sendWebhook({
+                            event: 'video_started',
+                            currentTime: data.currentTime || 0,
+                            duration: data.duration || 0
+                        });
                     }
                 }
             });

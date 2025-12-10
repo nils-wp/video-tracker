@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video</title>
+</head>
+<body>
+    <!--
+    =================================================================
+    MINIMALES EMBED TEMPLATE
+    Kopiere diesen Code auf deine Landingpage
+    =================================================================
+    -->
+
+    <!-- 1. Video Container (platziere wo das Video erscheinen soll) -->
+    <div id="video-player"></div>
+
+    <!-- 2. Video Tracker Script -->
+    <script src="video-tracker.js"></script>
+
+    <!-- 3. Konfiguration -->
+    <script>
+        new VideoTracker('video-player', {
+            // Video URL (S3, Cloudflare, etc.)
+            videoUrl: 'https://example.com/dein-video.mp4',
+
+            // Dein n8n Webhook
+            webhookUrl: 'https://dein-n8n-server.de/webhook/video-tracking',
+
+            // Meilensteine bei denen Webhooks gesendet werden
+            milestones: {
+                type: 'percent',
+                values: [25, 50, 75, 100]
+            },
+
+            // Player Optionen
+            autoplay: false,
+            controls: true
+        });
+    </script>
+</body>
+</html>
