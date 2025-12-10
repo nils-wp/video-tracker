@@ -532,6 +532,8 @@
             this.lastTrackedTime = 0;
             this.webhooksSent = 0;
             this.webhooksFailed = 0;
+            this.videoStartedSent = false;
+            this.lastKnownDuration = 0;
 
             // Initialisierung
             this.extractEmailFromUrl();
@@ -779,59 +781,63 @@
             });
 
             window.addEventListener('message', (event) => {
-                // Log ALL messages for debugging
-                console.log('VideoTracker postMessage received:', {
-                    origin: event.origin,
-                    data: event.data,
-                    type: event.data?.type || event.data?.event || 'unknown'
-                });
-
                 // Origin verifizieren - aber erlaube auch andere Bunny Origins
                 const isBunnyOrigin = event.origin.includes('bunny') ||
                                       event.origin.includes('mediadelivery') ||
                                       event.origin.includes('b-cdn');
 
                 if (!this.originVerifier.verifyEvent(event) && !isBunnyOrigin) {
-                    console.warn('VideoTracker: postMessage von unbekannter Origin ignoriert:', event.origin);
                     return;
                 }
 
-                // Handle Bunny Stream messages (multiple formats)
-                if (event.data) {
-                    const data = event.data;
+                // Parse data - Bunny sends JSON as string!
+                let data = event.data;
+                if (typeof data === 'string') {
+                    try {
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        return; // Not valid JSON, ignore
+                    }
+                }
 
-                    // Format 1: {type: 'bunny-stream-time-update', currentTime: X, duration: Y}
-                    if (data.type === 'bunny-stream-time-update') {
+                if (!data || typeof data !== 'object') return;
+
+                // Log parsed messages for debugging
+                console.log('VideoTracker Bunny Event:', {
+                    event: data.event || data.type,
+                    currentTime: data.currentTime,
+                    duration: data.duration,
+                    raw: data
+                });
+
+                // Handle Bunny player.js events
+                const eventType = data.event || data.type;
+
+                // Time update events
+                if (eventType === 'timeupdate' || eventType === 'bunny-stream-time-update') {
+                    if (data.currentTime !== undefined && data.duration !== undefined) {
                         this.handleTimeUpdate(data.currentTime, data.duration);
                     }
-                    // Format 2: {event: 'timeupdate', currentTime: X, duration: Y}
-                    else if (data.event === 'timeupdate' && data.currentTime !== undefined) {
-                        this.handleTimeUpdate(data.currentTime, data.duration);
-                    }
-                    // Format 3: {currentTime: X, duration: Y} (no type)
-                    else if (data.currentTime !== undefined && data.duration !== undefined && !data.type && !data.event) {
-                        this.handleTimeUpdate(data.currentTime, data.duration);
-                    }
-                    // Format 4: Bunny specific progress
-                    else if (data.type === 'progress' || data.event === 'progress') {
-                        if (data.percent !== undefined) {
-                            const duration = data.duration || 100;
-                            this.handleTimeUpdate((data.percent / 100) * duration, duration);
-                        }
-                    }
-                    // Video ended
-                    else if (data.type === 'bunny-stream-ended' || data.event === 'ended' || data.type === 'ended') {
-                        this.checkMilestone(100, data.duration || 100);
-                    }
-                    // Video started/play
-                    else if (data.type === 'play' || data.event === 'play' || data.type === 'bunny-stream-play') {
-                        console.log('VideoTracker: Bunny video started');
+                }
+                // Video play event
+                else if (eventType === 'play' || eventType === 'playing') {
+                    console.log('VideoTracker: Video gestartet');
+                    if (!this.videoStartedSent) {
+                        this.videoStartedSent = true;
                         this.sendWebhook({
                             event: 'video_started',
                             currentTime: data.currentTime || 0,
                             duration: data.duration || 0
                         });
                     }
+                }
+                // Video ended
+                else if (eventType === 'ended' || eventType === 'bunny-stream-ended') {
+                    this.checkMilestone(100, data.duration || this.lastKnownDuration || 100);
+                }
+                // Store duration when available
+                if (data.duration && data.duration > 0) {
+                    this.lastKnownDuration = data.duration;
                 }
             });
         }
