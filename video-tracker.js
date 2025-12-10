@@ -806,39 +806,89 @@
 
                 if (!data || typeof data !== 'object') return;
 
-                // Log ALL parsed messages for debugging
-                console.log('VideoTracker Bunny Event:', JSON.stringify(data, null, 2));
+                // Only log player.js events
+                if (data.context === 'player.js') {
+                    console.log('VideoTracker Bunny Event:', data.event, data.value);
+                }
 
-                // Handle Bunny player.js events
-                const eventType = data.event || data.type;
+                // Handle Bunny player.js events (context: "player.js")
+                if (data.context === 'player.js') {
+                    const eventType = data.event;
+                    const value = data.value;
 
-                // Time update events
-                if (eventType === 'timeupdate' || eventType === 'bunny-stream-time-update') {
-                    if (data.currentTime !== undefined && data.duration !== undefined) {
-                        this.handleTimeUpdate(data.currentTime, data.duration);
+                    // When ready, subscribe to events
+                    if (eventType === 'ready') {
+                        console.log('VideoTracker: Bunny player ready, subscribing to events...');
+                        this.subscribeToBunnyEvents();
                     }
-                }
-                // Video play event
-                else if (eventType === 'play' || eventType === 'playing') {
-                    console.log('VideoTracker: Video gestartet');
-                    if (!this.videoStartedSent) {
-                        this.videoStartedSent = true;
-                        this.sendWebhook({
-                            event: 'video_started',
-                            currentTime: data.currentTime || 0,
-                            duration: data.duration || 0
-                        });
+                    // Video play event
+                    else if (eventType === 'play') {
+                        console.log('VideoTracker: Video gestartet!');
+                        if (!this.videoStartedSent) {
+                            this.videoStartedSent = true;
+                            this.sendWebhook({
+                                event: 'video_started',
+                                currentTime: 0,
+                                duration: this.lastKnownDuration || 0
+                            });
+                        }
                     }
-                }
-                // Video ended
-                else if (eventType === 'ended' || eventType === 'bunny-stream-ended') {
-                    this.checkMilestone(100, data.duration || this.lastKnownDuration || 100);
-                }
-                // Store duration when available
-                if (data.duration && data.duration > 0) {
-                    this.lastKnownDuration = data.duration;
+                    // Time update events - value contains currentTime
+                    else if (eventType === 'timeupdate') {
+                        const currentTime = typeof value === 'number' ? value : (value?.currentTime || 0);
+                        if (this.lastKnownDuration > 0) {
+                            this.handleTimeUpdate(currentTime, this.lastKnownDuration);
+                        }
+                    }
+                    // Progress event - might contain duration
+                    else if (eventType === 'progress') {
+                        // Try to get duration
+                        this.requestBunnyDuration();
+                    }
+                    // Video ended
+                    else if (eventType === 'ended') {
+                        console.log('VideoTracker: Video beendet!');
+                        this.checkMilestone(100, this.lastKnownDuration || 100);
+                    }
+                    // Duration response from getDuration()
+                    else if (eventType === 'getDuration' && typeof value === 'number' && value > 0) {
+                        console.log('VideoTracker: Duration erhalten:', value);
+                        this.lastKnownDuration = value;
+                    }
                 }
             });
+        }
+
+        /**
+         * Subscribe to Bunny player events
+         */
+        subscribeToBunnyEvents() {
+            if (!this.bunnyIframe || !this.bunnyIframe.contentWindow) return;
+
+            const events = ['play', 'pause', 'timeupdate', 'ended', 'progress'];
+            events.forEach(eventName => {
+                this.bunnyIframe.contentWindow.postMessage(JSON.stringify({
+                    context: 'player.js',
+                    method: 'addEventListener',
+                    args: [eventName]
+                }), '*');
+            });
+
+            // Also request duration
+            this.requestBunnyDuration();
+        }
+
+        /**
+         * Request duration from Bunny player
+         */
+        requestBunnyDuration() {
+            if (!this.bunnyIframe || !this.bunnyIframe.contentWindow) return;
+
+            this.bunnyIframe.contentWindow.postMessage(JSON.stringify({
+                context: 'player.js',
+                method: 'getDuration',
+                args: []
+            }), '*');
         }
 
         /**
