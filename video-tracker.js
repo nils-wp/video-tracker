@@ -855,27 +855,69 @@
                         console.log('VideoTracker: Duration erhalten:', value);
                         this.lastKnownDuration = value;
                     }
+                    // CurrentTime response from polling
+                    else if (eventType === 'getCurrentTime' && typeof value === 'number') {
+                        this.handlePolledTime(value);
+                    }
                 }
             });
         }
 
         /**
-         * Subscribe to Bunny player events
+         * Subscribe to Bunny player events and start polling
          */
         subscribeToBunnyEvents() {
             if (!this.bunnyIframe || !this.bunnyIframe.contentWindow) return;
 
-            const events = ['play', 'pause', 'timeupdate', 'ended', 'progress'];
-            events.forEach(eventName => {
-                this.bunnyIframe.contentWindow.postMessage(JSON.stringify({
-                    context: 'player.js',
-                    method: 'addEventListener',
-                    args: [eventName]
-                }), '*');
-            });
-
-            // Also request duration
+            // Request duration first
             this.requestBunnyDuration();
+
+            // Start polling for current time (more reliable than events)
+            this.startTimePolling();
+        }
+
+        /**
+         * Start polling for current time
+         */
+        startTimePolling() {
+            if (this.pollingInterval) return;
+
+            this.lastPolledTime = 0;
+            this.pollingInterval = setInterval(() => {
+                if (this.bunnyIframe && this.bunnyIframe.contentWindow) {
+                    this.bunnyIframe.contentWindow.postMessage(JSON.stringify({
+                        context: 'player.js',
+                        method: 'getCurrentTime',
+                        args: []
+                    }), '*');
+                }
+            }, 1000); // Poll every second
+        }
+
+        /**
+         * Handle polled time from Bunny player
+         */
+        handlePolledTime(currentTime) {
+            // Detect video started (time moved from 0)
+            if (currentTime > 0.5 && !this.videoStartedSent) {
+                console.log('VideoTracker: Video gestartet! (erkannt via Polling)');
+                this.videoStartedSent = true;
+                this.sendWebhook({
+                    event: 'video_started',
+                    currentTime: currentTime,
+                    duration: this.lastKnownDuration || 0
+                });
+            }
+
+            // Track time updates for milestones
+            if (currentTime > 0 && this.lastKnownDuration > 0) {
+                this.handleTimeUpdate(currentTime, this.lastKnownDuration);
+            }
+
+            // Detect video ended
+            if (this.lastKnownDuration > 0 && currentTime >= this.lastKnownDuration - 1) {
+                this.checkMilestone(100, this.lastKnownDuration);
+            }
         }
 
         /**
