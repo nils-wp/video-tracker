@@ -1,5 +1,5 @@
 /**
- * Video Analytics Tracker v2.0.0
+ * Video Analytics Tracker v2.1.0
  * Selbst-gehostete Alternative zu Vidalytics
  *
  * Production-Ready Features:
@@ -9,6 +9,7 @@
  * - Error Monitoring
  * - postMessage Origin Verification
  * - Bunny.net Stream & HTML5 Video Support
+ * - HLS Streaming Support (für Safari iOS Kompatibilität)
  * - E-Mail-Tracking aus URL-Parametern
  */
 
@@ -380,9 +381,6 @@
             // Standard Bunny.net Origins
             this.addOrigin('https://iframe.mediadelivery.net');
             this.addOrigin('https://video.bunnycdn.com');
-            // Framer & Common Origins
-            this.addOrigin('https://wachstumspartner.io');
-            this.addOrigin('https://framer.app');
         }
 
         /**
@@ -435,7 +433,7 @@
     const defaultConfig = {
         // Video Einstellungen
         videoUrl: '',
-        videoType: 'html5', // 'html5' oder 'bunny'
+        videoType: 'html5', // 'html5', 'hls' oder 'bunny'
         bunnyVideoId: '',
         bunnyLibraryId: '',
 
@@ -532,8 +530,6 @@
             this.lastTrackedTime = 0;
             this.webhooksSent = 0;
             this.webhooksFailed = 0;
-            this.videoStartedSent = false;
-            this.lastKnownDuration = 0;
 
             // Initialisierung
             this.extractEmailFromUrl();
@@ -610,53 +606,25 @@
 
         /**
          * E-Mail aus URL-Parametern extrahieren mit Validierung
-         * Versucht auch parent window für iframe-Einbettungen
          */
         extractEmailFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
             const emailParams = ['email', 'e', 'subscriber_email', 'contact_email'];
 
-            // Versuche verschiedene URL-Quellen (für iframe-Einbettungen)
-            const urlSources = [
-                window.location.search,
-            ];
+            for (const param of emailParams) {
+                const value = urlParams.get(param);
+                if (value) {
+                    // Sanitize
+                    const sanitized = this.config.security.sanitizeInputs
+                        ? Validators.sanitizeString(value)
+                        : value;
 
-            // Versuche parent window (für iframes)
-            try {
-                if (window.parent && window.parent !== window) {
-                    urlSources.push(window.parent.location.search);
-                }
-            } catch (e) {
-                // Cross-origin - versuche aus referrer
-                if (document.referrer) {
-                    try {
-                        const referrerUrl = new URL(document.referrer);
-                        urlSources.push(referrerUrl.search);
-                    } catch (e2) {
-                        // Ignore
-                    }
-                }
-            }
-
-            // Durchsuche alle URL-Quellen
-            for (const search of urlSources) {
-                if (!search) continue;
-                const urlParams = new URLSearchParams(search);
-
-                for (const param of emailParams) {
-                    const value = urlParams.get(param);
-                    if (value) {
-                        // Sanitize
-                        const sanitized = this.config.security.sanitizeInputs
-                            ? Validators.sanitizeString(value)
-                            : value;
-
-                        // Validieren
-                        if (!this.config.security.validateEmail || Validators.isValidEmail(sanitized)) {
-                            this.email = sanitized;
-                            return;
-                        } else {
-                            console.warn(`VideoTracker: Ungültige E-Mail in URL-Parameter "${param}" gefunden.`);
-                        }
+                    // Validieren
+                    if (!this.config.security.validateEmail || Validators.isValidEmail(sanitized)) {
+                        this.email = sanitized;
+                        break;
+                    } else {
+                        console.warn(`VideoTracker: Ungültige E-Mail in URL-Parameter "${param}" gefunden.`);
                     }
                 }
             }
@@ -696,6 +664,8 @@
 
             if (this.config.videoType === 'bunny') {
                 this.renderBunnyPlayer();
+            } else if (this.config.videoType === 'hls') {
+                this.renderHlsPlayer();
             } else {
                 this.renderHtml5Player();
             }
@@ -735,6 +705,124 @@
         }
 
         /**
+         * HLS Player rendern (für .m3u8 Streams)
+         * Nutzt native HLS auf Safari, HLS.js auf anderen Browsern
+         */
+        renderHlsPlayer() {
+            this.video = document.createElement('video');
+            this.video.controls = this.config.controls;
+            this.video.autoplay = this.config.autoplay;
+            this.video.muted = this.config.muted;
+            this.video.playsInline = true;
+            this.video.preload = 'metadata';
+
+            if (this.config.poster) {
+                this.video.poster = this.config.poster;
+            }
+
+            this.video.style.width = '100%';
+            this.video.style.display = 'block';
+            this.video.style.borderRadius = this.config.styles.borderRadius;
+            this.video.style.boxShadow = this.config.styles.boxShadow;
+            this.video.style.backgroundColor = '#000';
+
+            this.container.appendChild(this.video);
+
+            // Check ob native HLS Support vorhanden ist (Safari)
+            if (this.video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari: Native HLS
+                this.video.src = this.config.videoUrl;
+                console.log('VideoTracker: Native HLS (Safari)');
+            } else {
+                // Andere Browser: HLS.js laden
+                this.loadHlsJs();
+            }
+
+            // Error Handler
+            this.video.addEventListener('error', () => {
+                this.errorMonitor.capture(new Error(`HLS Video load error: ${this.video.error?.message || 'Unknown'}`), {
+                    type: 'hls_load_error',
+                    videoUrl: this.config.videoUrl
+                });
+            });
+        }
+
+        /**
+         * HLS.js dynamisch laden und initialisieren
+         */
+        loadHlsJs() {
+            // Check ob HLS.js bereits geladen ist
+            if (typeof Hls !== 'undefined') {
+                this.initHls();
+                return;
+            }
+
+            // HLS.js von CDN laden
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js';
+            script.onload = () => {
+                console.log('VideoTracker: HLS.js geladen');
+                this.initHls();
+            };
+            script.onerror = () => {
+                this.errorMonitor.capture(new Error('Failed to load HLS.js'), {
+                    type: 'hls_library_error'
+                });
+                // Fallback: Direktes src setzen (funktioniert evtl. trotzdem)
+                this.video.src = this.config.videoUrl;
+            };
+            document.head.appendChild(script);
+        }
+
+        /**
+         * HLS.js initialisieren
+         */
+        initHls() {
+            if (typeof Hls === 'undefined') {
+                console.error('VideoTracker: HLS.js nicht verfügbar');
+                return;
+            }
+
+            if (Hls.isSupported()) {
+                this.hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: false
+                });
+                this.hls.loadSource(this.config.videoUrl);
+                this.hls.attachMedia(this.video);
+
+                this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('VideoTracker: HLS Manifest geladen');
+                    if (this.config.autoplay) {
+                        this.video.play().catch(() => {});
+                    }
+                });
+
+                this.hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        this.errorMonitor.capture(new Error(`HLS fatal error: ${data.type}`), {
+                            type: 'hls_error',
+                            details: data.details
+                        });
+                        // Versuche Recovery
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            this.hls.startLoad();
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            this.hls.recoverMediaError();
+                        }
+                    }
+                });
+
+                console.log('VideoTracker: HLS.js initialisiert');
+            } else {
+                console.error('VideoTracker: HLS nicht unterstützt');
+                this.errorMonitor.capture(new Error('HLS not supported in this browser'), {
+                    type: 'hls_not_supported'
+                });
+            }
+        }
+
+        /**
          * Bunny.net Stream Player rendern
          */
         renderBunnyPlayer() {
@@ -750,14 +838,10 @@
             const params = new URLSearchParams({
                 autoplay: this.config.autoplay ? 'true' : 'false',
                 preload: 'true',
-                responsive: 'true',
-                // Enable Bunny Player API for postMessage events
-                enableApi: 'true',
-                api: '1'
+                responsive: 'true'
             });
 
             iframe.src = `${bunnyUrl}?${params.toString()}`;
-            iframe.id = 'bunny-stream-embed';
             iframe.style.position = 'absolute';
             iframe.style.top = '0';
             iframe.style.left = '0';
@@ -778,159 +862,24 @@
          * Bunny.net Tracking via postMessage mit Origin-Verifikation
          */
         setupBunnyTracking() {
-            // Send test webhook on init to verify connection
-            this.sendWebhook({
-                event: 'tracker_initialized',
-                message: 'VideoTracker successfully loaded'
-            });
-
             window.addEventListener('message', (event) => {
-                // Origin verifizieren - aber erlaube auch andere Bunny Origins
-                const isBunnyOrigin = event.origin.includes('bunny') ||
-                                      event.origin.includes('mediadelivery') ||
-                                      event.origin.includes('b-cdn');
-
-                if (!this.originVerifier.verifyEvent(event) && !isBunnyOrigin) {
+                // Origin verifizieren!
+                if (!this.originVerifier.verifyEvent(event)) {
+                    console.warn('VideoTracker: postMessage von unbekannter Origin ignoriert:', event.origin);
                     return;
                 }
 
-                // Parse data - Bunny sends JSON as string!
-                let data = event.data;
-                if (typeof data === 'string') {
-                    try {
-                        data = JSON.parse(data);
-                    } catch (e) {
-                        return; // Not valid JSON, ignore
-                    }
-                }
-
-                if (!data || typeof data !== 'object') return;
-
-                // Only log player.js events
-                if (data.context === 'player.js') {
-                    console.log('VideoTracker Bunny Event:', data.event, data.value);
-                }
-
-                // Handle Bunny player.js events (context: "player.js")
-                if (data.context === 'player.js') {
-                    const eventType = data.event;
-                    const value = data.value;
-
-                    // When ready, subscribe to events
-                    if (eventType === 'ready') {
-                        console.log('VideoTracker: Bunny player ready, subscribing to events...');
-                        this.subscribeToBunnyEvents();
-                    }
-                    // Video play event
-                    else if (eventType === 'play') {
-                        console.log('VideoTracker: Video gestartet!');
-                        if (!this.videoStartedSent) {
-                            this.videoStartedSent = true;
-                            this.sendWebhook({
-                                event: 'video_started',
-                                currentTime: 0,
-                                duration: this.lastKnownDuration || 0
-                            });
-                        }
-                    }
-                    // Time update events - value contains currentTime
-                    else if (eventType === 'timeupdate') {
-                        const currentTime = typeof value === 'number' ? value : (value?.currentTime || 0);
-                        if (this.lastKnownDuration > 0) {
-                            this.handleTimeUpdate(currentTime, this.lastKnownDuration);
-                        }
-                    }
-                    // Progress event - might contain duration
-                    else if (eventType === 'progress') {
-                        // Try to get duration
-                        this.requestBunnyDuration();
-                    }
-                    // Video ended
-                    else if (eventType === 'ended') {
-                        console.log('VideoTracker: Video beendet!');
-                        this.checkMilestone(100, this.lastKnownDuration || 100);
-                    }
-                    // Duration response from getDuration()
-                    else if (eventType === 'getDuration' && typeof value === 'number' && value > 0) {
-                        console.log('VideoTracker: Duration erhalten:', value);
-                        this.lastKnownDuration = value;
-                    }
-                    // CurrentTime response from polling
-                    else if (eventType === 'getCurrentTime' && typeof value === 'number') {
-                        this.handlePolledTime(value);
+                if (event.data && event.data.type) {
+                    switch (event.data.type) {
+                        case 'bunny-stream-time-update':
+                            this.handleTimeUpdate(event.data.currentTime, event.data.duration);
+                            break;
+                        case 'bunny-stream-ended':
+                            this.checkMilestone(100, event.data.duration);
+                            break;
                     }
                 }
             });
-        }
-
-        /**
-         * Subscribe to Bunny player events and start polling
-         */
-        subscribeToBunnyEvents() {
-            if (!this.bunnyIframe || !this.bunnyIframe.contentWindow) return;
-
-            // Request duration first
-            this.requestBunnyDuration();
-
-            // Start polling for current time (more reliable than events)
-            this.startTimePolling();
-        }
-
-        /**
-         * Start polling for current time
-         */
-        startTimePolling() {
-            if (this.pollingInterval) return;
-
-            this.lastPolledTime = 0;
-            this.pollingInterval = setInterval(() => {
-                if (this.bunnyIframe && this.bunnyIframe.contentWindow) {
-                    this.bunnyIframe.contentWindow.postMessage(JSON.stringify({
-                        context: 'player.js',
-                        method: 'getCurrentTime',
-                        args: []
-                    }), '*');
-                }
-            }, 1000); // Poll every second
-        }
-
-        /**
-         * Handle polled time from Bunny player
-         */
-        handlePolledTime(currentTime) {
-            // Detect video started (time moved from 0)
-            if (currentTime > 0.5 && !this.videoStartedSent) {
-                console.log('VideoTracker: Video gestartet! (erkannt via Polling)');
-                this.videoStartedSent = true;
-                this.sendWebhook({
-                    event: 'video_started',
-                    currentTime: currentTime,
-                    duration: this.lastKnownDuration || 0
-                });
-            }
-
-            // Track time updates for milestones
-            if (currentTime > 0 && this.lastKnownDuration > 0) {
-                this.handleTimeUpdate(currentTime, this.lastKnownDuration);
-            }
-
-            // Detect video ended
-            if (this.lastKnownDuration > 0 && currentTime >= this.lastKnownDuration - 1) {
-                this.checkMilestone(100, this.lastKnownDuration);
-            }
-        }
-
-        /**
-         * Request duration from Bunny player
-         */
-        requestBunnyDuration() {
-            if (!this.bunnyIframe || !this.bunnyIframe.contentWindow) return;
-
-            this.bunnyIframe.contentWindow.postMessage(JSON.stringify({
-                context: 'player.js',
-                method: 'getDuration',
-                args: []
-            }), '*');
         }
 
         /**
