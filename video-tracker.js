@@ -858,30 +858,72 @@
             this.container.appendChild(wrapper);
 
             this.bunnyIframe = iframe;
+            iframe.id = 'bunny-stream-embed-' + Date.now();
             this.setupBunnyTracking();
         }
 
         /**
-         * Bunny.net Tracking via postMessage mit Origin-Verifikation
+         * Bunny.net Tracking via Player.js API
          */
         setupBunnyTracking() {
-            window.addEventListener('message', (event) => {
-                // Origin verifizieren!
-                if (!this.originVerifier.verifyEvent(event)) {
-                    console.warn('VideoTracker: postMessage von unbekannter Origin ignoriert:', event.origin);
-                    return;
-                }
+            // Load Player.js library
+            if (typeof playerjs === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js';
+                script.onload = () => {
+                    console.log('VideoTracker: Player.js geladen');
+                    this.initBunnyPlayer();
+                };
+                script.onerror = () => {
+                    console.error('VideoTracker: Player.js konnte nicht geladen werden');
+                    this.errorMonitor.capture(new Error('Failed to load Player.js'), {
+                        type: 'playerjs_load_error'
+                    });
+                };
+                document.head.appendChild(script);
+            } else {
+                this.initBunnyPlayer();
+            }
+        }
 
-                if (event.data && event.data.type) {
-                    switch (event.data.type) {
-                        case 'bunny-stream-time-update':
-                            this.handleTimeUpdate(event.data.currentTime, event.data.duration);
-                            break;
-                        case 'bunny-stream-ended':
-                            this.checkMilestone(100, event.data.duration);
-                            break;
-                    }
-                }
+        /**
+         * Bunny Player.js initialisieren
+         */
+        initBunnyPlayer() {
+            if (typeof playerjs === 'undefined' || !this.bunnyIframe) {
+                console.error('VideoTracker: Player.js oder iframe nicht verfügbar');
+                return;
+            }
+
+            const player = new playerjs.Player(this.bunnyIframe);
+            this.bunnyPlayer = player;
+
+            player.on('ready', () => {
+                console.log('VideoTracker: Bunny Player ready');
+
+                player.on('play', () => {
+                    player.getDuration((duration) => {
+                        this.sendWebhook({
+                            event: 'video_started',
+                            currentTime: 0,
+                            duration: duration
+                        });
+                    });
+                });
+
+                player.on('timeupdate', (data) => {
+                    player.getDuration((duration) => {
+                        if (duration && data.seconds > 0) {
+                            this.handleTimeUpdate(data.seconds, duration);
+                        }
+                    });
+                });
+
+                player.on('ended', () => {
+                    player.getDuration((duration) => {
+                        this.checkMilestone(100, duration);
+                    });
+                });
             });
         }
 
