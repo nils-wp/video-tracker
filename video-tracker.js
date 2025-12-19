@@ -901,14 +901,18 @@
             player.on('ready', () => {
                 console.log('VideoTracker: Bunny Player ready');
 
+                let videoStarted = false;
                 player.on('play', () => {
-                    player.getDuration((duration) => {
-                        this.sendWebhook({
-                            event: 'video_started',
-                            currentTime: 0,
-                            duration: duration
+                    if (!videoStarted) {
+                        videoStarted = true;
+                        player.getDuration((duration) => {
+                            this.sendWebhook({
+                                event: 'video_started',
+                                currentTime: 0,
+                                duration: duration
+                            });
                         });
-                    });
+                    }
                 });
 
                 player.on('timeupdate', (data) => {
