@@ -380,6 +380,7 @@
             this.allowedOrigins = new Set(allowedOrigins);
             // Standard Bunny.net Origins
             this.addOrigin('https://iframe.mediadelivery.net');
+            this.addOrigin('https://player.mediadelivery.net');
             this.addOrigin('https://video.bunnycdn.com');
         }
 
