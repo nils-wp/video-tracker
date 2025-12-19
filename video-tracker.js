@@ -834,7 +834,7 @@
             wrapper.style.boxShadow = this.config.styles.boxShadow;
 
             const iframe = document.createElement('iframe');
-            const bunnyUrl = `https://iframe.mediadelivery.net/embed/${this.config.bunnyLibraryId}/${this.config.bunnyVideoId}`;
+            const bunnyUrl = `https://player.mediadelivery.net/embed/${this.config.bunnyLibraryId}/${this.config.bunnyVideoId}`;
             const params = new URLSearchParams({
                 autoplay: this.config.autoplay ? 'true' : 'false',
                 preload: 'true',
