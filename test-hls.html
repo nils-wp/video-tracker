@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Video Tracker Test</title>
+</head>
+<body style="background:#1a1a1a; padding:20px;">
+    <h1 style="color:white; text-align:center;">HLS Video Tracker Test</h1>
+
+    <div id="video-container" style="width:100%; max-width:1000px; margin:0 auto;"></div>
+
+    <script src="https://video-tracker.wolfbraun.link/video-tracker.js"></script>
+
+    <script>
+    new VideoTracker('video-container', {
+        videoType: 'hls',
+        videoUrl: 'https://vz-ffd425d6-921.b-cdn.net/198adc47-e13a-41ef-81e5-53f6f7787f76/playlist.m3u8',
+        webhookUrl: 'https://n8n.wolfbraun.link/webhook/godiavsl',
+        milestones: {
+            type: 'percent',
+            values: [10, 25, 50, 75, 100]
+        },
+        autoplay: false,
+        controls: true
+    });
+    </script>
+
+    <div style="color:#666; text-align:center; margin-top:20px;">
+        <p>Oeffne die Browser-Konsole (F12) um Logs zu sehen</p>
+    </div>
+</body>
+</html>
