@@ -839,7 +839,9 @@
             const params = new URLSearchParams({
                 autoplay: this.config.autoplay ? 'true' : 'false',
                 preload: 'true',
-                responsive: 'true'
+                responsive: 'true',
+                enableApi: 'true',
+                api: '1'
             });
 
             iframe.src = `${bunnyUrl}?${params.toString()}`;
