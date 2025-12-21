@@ -609,7 +609,16 @@
          * E-Mail aus URL-Parametern extrahieren mit Validierung
          */
         extractEmailFromUrl() {
-            const urlParams = new URLSearchParams(window.location.search);
+            // Try parent window first (for iframe embeds like Framer)
+            let search = window.location.search;
+            try {
+                if (window.parent && window.parent !== window && window.parent.location.search) {
+                    search = window.parent.location.search;
+                }
+            } catch (e) {
+                // Cross-origin access denied, use current window
+            }
+            const urlParams = new URLSearchParams(search);
             const emailParams = ['email', 'e', 'subscriber_email', 'contact_email'];
 
             for (const param of emailParams) {
